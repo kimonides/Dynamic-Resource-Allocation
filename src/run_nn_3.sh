@@ -18,4 +18,4 @@ pqos -a "llc:1=12;" > /dev/null
 pqos -e "llc:1=0x3f" > /dev/null
 
 
-taskset -c 0 /home/akimon/pcm/pcm.x -r --kimo 0.25
+taskset -c 0 /home/akimon/drl_pcm/pcm.x -r --kimo 0.25

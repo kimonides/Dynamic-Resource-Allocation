@@ -180,14 +180,16 @@ class CustomEnv(gym.Env):
     def close(self):
         return
 
-def signal_handler(sig, frame):
-    print('Exiting')
-    sys.exit(0)
 
+from pathlib import Path
+from datetime import datetime
+dt = datetime.now().strftime("%m_%d_%H")
+Path("./models/%s" % dt).mkdir(parents=True, exist_ok=True)
 
 env = CustomEnv()
 model = PPO(MlpPolicy, env, verbose=1)
 
 while True:
     model.learn(total_timesteps=10000)
+    mode.save( "./models/%s/%s" % ( dt,round(time.time()) - env.startingTime ) )
 
