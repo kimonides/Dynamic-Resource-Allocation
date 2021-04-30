@@ -1,5 +1,5 @@
 def addDictionaries(a, b):
-    "merges b into a"
+    "Add dictionary a and b by key, any keys that are unique to a or b are added"
     res = {}
     for key in b:
         if key in a:
@@ -14,6 +14,7 @@ def addDictionaries(a, b):
     return res
 
 def divideDictionaries(a, nr):
+    "Divide all the values of dictionary a by nr"
     res = {}
     for key in a:
         if isinstance(a[key], dict) :
