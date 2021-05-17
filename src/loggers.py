@@ -30,8 +30,8 @@ def setupDataLoggers():
 
     return loggers
 
-
-def containerLogger(containerState, containerReward, rpsLogger, startTime):
+def containerLogger(containerReward, rpsLogger, startTime):
+# def containerLogger(containerReward, rpsLogger, startTime):
     # sjrn , qtime, servieTime
     command = shlex.split("docker exec -t -w /tailbenchQPS/sphinx tb ./run.sh")
     process = subprocess.Popen(command, shell=False, stdout=subprocess.PIPE)
@@ -46,22 +46,24 @@ def containerLogger(containerState, containerReward, rpsLogger, startTime):
                     rps = output.strip().decode('utf-8').split(':')[1]
                     rpsLogger.warn("RPS - %s %s" % (rps, round(time.time()) - startTime))
                     continue
-                if containerReward['lock'].acquire(blocking=False) and containerState['lock'].acquire(blocking=False):
+                # if containerReward['lock'].acquire(blocking=False) and containerState['lock'].acquire(blocking=False):
+                if containerReward['lock'].acquire(blocking=False):
                     sjrn, qtime, svc = [float(v) for v in output.strip().decode('utf-8').split(',')]
-                    containerReward['reward'] += sjrn
-                    containerReward['count'] += 1
+                    containerReward['reward'].append(sjrn)
+                    # containerReward['reward'] += sjrn
+                    # containerReward['count'] += 1
                     containerReward['lock'].release()
-                    containerState['state'][0] += svc
-                    containerState['state'][1] += qtime
-                    containerState['count'] += 1
-                    containerState['lock'].release()
+                    # containerState['state'][0] += svc
+                    # containerState['state'][1] += qtime
+                    # containerState['count'] += 1
+                    # containerState['lock'].release()
             except ValueError:
                 containerReward['lock'].release()
-                containerState['lock'].release()
+                # containerState['lock'].release()
     rc = process.poll()
 
 def pcmLogger(pcmState):
-    command = shlex.split("./run_nn_3.sh")
+    command = shlex.split("./start_pcm.sh")
     process = subprocess.Popen(command, shell=False, stdout=subprocess.PIPE)
 
     while True:

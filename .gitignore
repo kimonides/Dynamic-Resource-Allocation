@@ -129,4 +129,4 @@ dmypy.json
 .pyre/
 
 # Any saved models
-.zip
+models/
