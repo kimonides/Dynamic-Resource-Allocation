@@ -107,7 +107,7 @@ class CustomEnv(gym.Env):
         # Hardware state is [ IPCU, MissesU, MissRatioU, IPCUn, MissesUn, MissRatioUn, CStateU, CStateUn ]
         # Hardware state is [ IPCU, MissesU, MissRatioU, CStateU, CStateUn ]
         headers = {'Accept': 'application/json'}
-        resp = requests.get('http://localhost:9738/persecond/15', headers=headers)
+        resp = requests.get('http://localhost:9738/persecond/', headers=headers)
         resp = resp.json()
     
         state = {}
@@ -198,16 +198,16 @@ class CustomEnv(gym.Env):
         # sjrn = containerReward['reward'] / containerReward['count']
         sjrn95 = np.percentile(containerReward['reward'] , 95)
         sjrn = round(sjrn95/1e6)
-        containerReward['reward'] = []
+        # containerReward['reward'] = []
         # containerReward['count'] = 0
         containerReward['lock'].release()
 
         sjrnLogger.info("95th percentile is : " + str(sjrn) + " " + str( round(time.time()) - self.startingTime))
         # reward = (-1) * sjrn / 2000 - self.appCacheWays/20 - len(self.cores)/24
-        if sjrn > 2000:
+        if sjrn > 2500:
             reward = max(-(sjrn/2500)**3, -50)
         else:
-            reward = sjrn/2000 + (20/self.appCacheWays + 24/len(self.cores))
+            reward = sjrn/2500 + (20/self.appCacheWays + 24/len(self.cores))
         rewardLogger.info("Reward is : " + str(reward) + " " + str( round(time.time()) - self.startingTime))
         return reward
 
@@ -267,9 +267,12 @@ model = DQN("MlpPolicy", env, policy_kwargs=policy_kwargs, verbose=1,
             prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_beta_iters=20000,
             double_q=True, 
             learning_rate=0.0025, target_network_update_freq=150, learning_starts = 750,
-            batch_size=64, buffer_size=1e6,
-            gamma=0.99, exploration_fraction = 0.1 , exploration_initial_eps = 1, exploration_final_eps=0.01
+            batch_size=64, buffer_size=1000000,
+            gamma=0.99, exploration_fraction = 0.1 , exploration_initial_eps = 1, exploration_final_eps=0.01,
+            tensorboard_log="./logs/%s/" % dt, n_cpu_tf_sess=22
             )
+
+# sudo taskset -c 0-11,24-35 python3 controller.py 
 
 # model = PPO(MlpPolicy, env, verbose=1, learning_rate=0.01)
 
