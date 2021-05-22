@@ -26,53 +26,43 @@ def setupDataLoggers():
     loggers.append(setupLoger('state', './logs/{0}/state.log'.format(dt)))
     loggers.append(setupLoger('cores', './logs/{0}/cores.log'.format(dt)))
     loggers.append(setupLoger('rps', './logs/{0}/rps.log'.format(dt)))
+    loggers.append(setupLoger('core_mapping', './logs/{0}/core_mapping.log'.format(dt)))
 
     return loggers
 
 def containerLogger(containerReward, rpsLogger, startTime):
-# def containerLogger(containerReward, rpsLogger, startTime):
-    # sjrn , qtime, servieTime
-    command = shlex.split("docker exec -t -w /tailbenchQPS/sphinx tb ./run.sh")
-    process = subprocess.Popen(command, shell=False, stdout=subprocess.PIPE)
-
+    import subprocess, os
+    my_env = os.environ.copy()
+    my_env["DATA_ROOT"] = "/home/akimon/inputs/tailbench.inputs"
+    my_env["TBENCH_WARMUPREQS"] = '1000'
+    my_env["TBENCH_MAXREQS"] = '0'
+    my_env["TBENCH_QPS"] = '500'
+    my_env["TBENCH_MINSLEEPNS"] = '10000'
+    my_env["TBENCH_MNIST_DIR"] = "/home/akimon/inputs/tailbench.inputs/img-dnn/mnist"
+    my_env["TBENCH_QPS"] = '500'
+    command = 'taskset -c 12-23,36-47 /home/akimon/tailbench_latest_latest/tailbenchQPS/img-dnn/run.sh'
+    command = shlex.split(command)
+    process = subprocess.Popen(command, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     while True:
         output = process.stdout.readline()
+        
         if process.poll() is not None:
             break
         if output:
             try:
-                if( output.strip().decode().startswith('RPS')  ):
-                    rps = output.strip().decode('utf-8').split(':')[1]
+                output = output.decode().strip()
+                # print(output)
+                if( output.startswith('RPS')  ):
+                    rps = output.split(':')[1]
                     rpsLogger.warn("RPS - %s %s" % (rps, round(time.time()) - startTime))
                     continue
-                # if containerReward['lock'].acquire(blocking=False) and containerState['lock'].acquire(blocking=False):
-                if containerReward['lock'].acquire(blocking=False):
-                    sjrn, qtime, svc = [float(v) for v in output.strip().decode('utf-8').split(',')]
+                if output.isdigit() and containerReward['lock'].acquire(blocking=False):
+                    sjrn = float(output)
                     containerReward['reward'].append(sjrn)
-                    # containerReward['reward'] += sjrn
-                    # containerReward['count'] += 1
                     containerReward['lock'].release()
-                    # containerState['state'][0] += svc
-                    # containerState['state'][1] += qtime
-                    # containerState['count'] += 1
-                    # containerState['lock'].release()
             except ValueError:
                 containerReward['lock'].release()
-                # containerState['lock'].release()
     rc = process.poll()
 
-def pcmLogger(pcmState):
-    command = shlex.split("./start_pcm.sh")
-    process = subprocess.Popen(command, shell=False, stdout=subprocess.PIPE)
 
-    while True:
-        output = process.stdout.readline()
-        if process.poll() is not None:
-            break
-        if output:
-            if pcmState['lock'].acquire(blocking=False):
-                currentState = json.loads(output.decode())
-                pcmState['state'] = dictionaryUtils.addDictionaries(pcmState['state'],currentState)
-                pcmState['count'] += 1
-                pcmState['lock'].release()
-    rc = process.poll()
+
