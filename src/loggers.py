@@ -17,7 +17,7 @@ def setupLoger(name, file):
 
     return log
 
-def setupDataLoggers():
+def setupDataLoggers(appName):
     def setupLoger(name, file):
         log = logging.getLogger(name)
         log.setLevel(logging.DEBUG)
@@ -30,14 +30,14 @@ def setupDataLoggers():
         return log
     loggers = []
     dt = datetime.now().strftime("%m_%d_%H")
-    Path("./logs/%s" % dt).mkdir(parents=True, exist_ok=True)
-    loggers.append(setupLoger('reward', './logs/{0}/reward.log'.format(dt)))
-    loggers.append(setupLoger('ways', './logs/{0}/ways.log'.format(dt)))
-    loggers.append(setupLoger('sjrn', './logs/{0}/sjrn.log'.format(dt)))
-    loggers.append(setupLoger('state', './logs/{0}/state.log'.format(dt)))
-    loggers.append(setupLoger('cores', './logs/{0}/cores.log'.format(dt)))
-    loggers.append(setupLoger('rps', './logs/{0}/rps.log'.format(dt)))
-    loggers.append(setupLoger('core_mapping', './logs/{0}/core_mapping.log'.format(dt)))
+    Path("./logs/%s_%s" % (dt,appName)).mkdir(parents=True, exist_ok=True)
+    loggers.append(setupLoger('reward_%s' % appName, './logs/{0}_{1}/reward.log'.format(dt,appName)))
+    loggers.append(setupLoger('ways_%s' % appName, './logs/{0}_{1}/ways.log'.format(dt,appName)))
+    loggers.append(setupLoger('sjrn_%s' % appName, './logs/{0}_{1}/sjrn.log'.format(dt,appName)))
+    loggers.append(setupLoger('state_%s' % appName, './logs/{0}_{1}/state.log'.format(dt,appName)))
+    loggers.append(setupLoger('cores_%s' % appName, './logs/{0}_{1}/cores.log'.format(dt,appName)))
+    loggers.append(setupLoger('rps_%s' % appName, './logs/{0}_{1}/rps.log'.format(dt,appName)))
+    loggers.append(setupLoger('core_mapping_%s' % appName, './logs/{0}_{1}/core_mapping.log'.format(dt,appName)))
 
     return loggers
 
