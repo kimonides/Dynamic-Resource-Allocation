@@ -6,6 +6,17 @@ import subprocess
 import json
 import time
 
+def setupLoger(name, file):
+    log = logging.getLogger(name)
+    log.setLevel(logging.DEBUG)
+    fh = logging.FileHandler(file, mode='w')
+    fh.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(message)s')
+    fh.setFormatter(formatter)
+    log.addHandler(fh)
+
+    return log
+
 def setupDataLoggers():
     def setupLoger(name, file):
         log = logging.getLogger(name)
@@ -34,15 +45,22 @@ def containerLogger(containerReward, rpsLogger, startTime):
     import subprocess, os
     my_env = os.environ.copy()
     my_env["DATA_ROOT"] = "/home/akimon/inputs/tailbench.inputs"
-    my_env["TBENCH_WARMUPREQS"] = '1000'
+    my_env["TBENCH_WARMUPREQS"] = '0'
     my_env["TBENCH_MAXREQS"] = '0'
     my_env["TBENCH_QPS"] = '500'
     my_env["TBENCH_MINSLEEPNS"] = '10000'
     my_env["TBENCH_MNIST_DIR"] = "/home/akimon/inputs/tailbench.inputs/img-dnn/mnist"
     my_env["TBENCH_QPS"] = '500'
     command = 'taskset -c 12-23,36-47 /home/akimon/tailbench_latest_latest/tailbenchQPS/img-dnn/run.sh'
+    # command = 'taskset -c 12-23,36-47 /home/akimon/tailbench_latest_latest/tailbenchQPS/xapian/run.sh'
+    # command = 'taskset -c 12-23,36-47 /home/akimon/tailbench_latest_latest/tailbenchQPS/masstree/run.sh'
     command = shlex.split(command)
-    process = subprocess.Popen(command, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    # process = subprocess.Popen(command, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    process = subprocess.Popen(command, cwd="/home/akimon/tailbench_latest_latest/tailbenchQPS/img-dnn/", shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    # process = subprocess.Popen(command, cwd="/home/akimon/tailbench_latest_latest/tailbenchQPS/sphinx/", shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    # process = subprocess.Popen(command, cwd="/home/akimon/tailbench_latest_latest/tailbenchQPS/xapian/", shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    # process = subprocess.Popen(command, cwd="/home/akimon/tailbench_latest_latest/tailbenchQPS/masstree/", shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    # bullshitLogger = setupLoger('core_mapping', './logs/{0}/bullshit.log'.format(datetime.now().strftime("%m_%d_%H")))
     while True:
         output = process.stdout.readline()
         
