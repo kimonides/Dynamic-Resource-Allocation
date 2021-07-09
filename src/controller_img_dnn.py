@@ -318,8 +318,7 @@ if __name__ == "__main__":
             gamma=0.99, exploration_fraction=0.1, exploration_initial_eps=1, exploration_final_eps=0.01,
             tensorboard_log="./logs/%s/" % dt, n_cpu_tf_sess=22
             )
-    model.learn(total_timesteps=20000)
-    model.predict()
+    model.learn(total_timesteps=16000)
     model.save("./models/%s/model.zip" % dt)
 
 
