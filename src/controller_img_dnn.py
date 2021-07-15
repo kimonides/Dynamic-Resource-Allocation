@@ -69,10 +69,24 @@ EVENT_MAX = [e*2 for e in EVENT_MAX]
 
 
 class CustomEnv(gym.Env):
-    def __init__(self, cores, ways):
+    def __init__(self, cores, ways, unusedCores):
         super(CustomEnv, self).__init__()
 
         self.rewardLogger, self.wayLogger, self.sjrnLogger, self.stateLogger, self.coreLogger, self.rpsLogger, self.coreMapLogger = loggers.setupDataLoggers('img_dnn')
+
+        def setupLoger(name, file):
+            log = logging.getLogger(name)
+            log.setLevel(logging.DEBUG)
+            fh = logging.FileHandler(file, mode='w')
+            fh.setLevel(logging.DEBUG)
+            formatter = logging.Formatter('%(message)s')
+            fh.setFormatter(formatter)
+            log.addHandler(fh)
+
+            return log
+        
+        self.resource_logger = setupLoger('resource_%s' % 'img_dnn', './logs/{0}_{1}/resource.log'.format(dt,'img_dnn'))
+
 
         global deques, window_size
         self.deques = deques
@@ -105,20 +119,23 @@ class CustomEnv(gym.Env):
         os.system('pqos -e "llc:0=0x30000;" > /dev/null')
 
         # self.updateWays()
-        self.updateCores()
+        self.updateCores(unusedCores)
         # self.initialMapping()
 
         cores = str(self.cores)[1:-1].replace(' ', '')
-        os.system('pqos -a "llc:1=%s;" > /dev/null' % cores)
+        os.system('pqos -a "llc:2=%s;" > /dev/null' % cores)
 
-    def updateCores(self):
+        
+    def updateCores(self, unused_cores):
         cores_string = str(self.cores)[1:-1].replace(' ', '')
-        os.system('pqos -a "llc:1=%s;" > /dev/null' % cores_string)
+        os.system('pqos -a "llc:2=%s;" > /dev/null' % cores_string)
 
-        unused_cores = [core for core in self.allCores if core not in  self.cores]
+        # unused_cores = [core for core in self.allCores if core not in  self.cores]
         unused_cores_string = str(unused_cores)[1:-1].replace(' ', '')
-        os.system('pqos -a "llc:0=%s;" > /dev/null' % unused_cores_string)
+        # os.system('pqos -a "llc:0=%s;" > /dev/null' % unused_cores_string)
 
+        self.resource_logger.warn("Cores - %s %s" % (self.cores, round(time.time()) - self.startingTime))
+        self.resource_logger.warn("Unused Cores - %s %s" % (unused_cores, round(time.time()) - self.startingTime))
 
         core_index = 0
         for t in self.tid:
@@ -128,9 +145,24 @@ class CustomEnv(gym.Env):
         
         self.coreLogger.warn("Update cores to - %s %s" % (len(self.cores) + 1, round(time.time()) - self.startingTime))
 
-    def updateWays(self):
+    def formatForCAT(self, ways, reverse=False):
+        if reverse:
+            pivot = 1 << 19
+            res = 0
+            for _ in range(0,ways):
+                res = res + pivot
+                pivot = pivot >> 1      
+        else:
+            res = 1 << ways - 1
+            res = res + res - 1
+        return hex(res)
+
+    def updateWays(self, reverse=False):
         self.wayLogger.warn("Update ways to - %s %s" % (self.appCacheWays, round(time.time()) - self.startingTime))
-        os.system('sudo pqos -e "llc:1=%s;" > /dev/null' % self.formatForCAT(self.appCacheWays))
+
+        self.resource_logger.warn("Ways - %s %s" % (self.formatForCAT(self.appCacheWays, reverse), round(time.time()) - self.startingTime))
+
+        os.system('sudo pqos -e "llc:2=%s;" > /dev/null' % self.formatForCAT(self.appCacheWays, reverse))
 
     def startPerfmon(self):
         self.sessions = [None] * len(self.tid)
@@ -177,10 +209,7 @@ class CustomEnv(gym.Env):
 
         return list(normalized)
 
-    def formatForCAT(self, ways):
-        res = 1 << ways - 1
-        res = res + res - 1
-        return hex(res)
+    
 
 
     def getReward(self):
