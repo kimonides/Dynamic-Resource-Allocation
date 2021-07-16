@@ -123,24 +123,29 @@ class CustomEnv(gym.Env):
         # action is +-1
         if action == 1:
             unusedCores = [core for core in self.allCores if core not in self.cores]
-            for core in unusedCores:
-                if core % 2 == 0:
-                    self.cores.append(core)
-                    break
-            else:
-                newCore = unusedCores[0]
-                self.cores.append(newCore)
+            newCore = unusedCores[0]
+            self.cores.append(newCore)
+            # for core in unusedCores:
+            #     if core % 2 == 0:
+            #         self.cores.append(core)
+            #         break
+            # else:
+            #     newCore = unusedCores[0]
+            #     self.cores.append(newCore)
             cores = str(self.cores)[1:-1].replace(' ', '')
             os.system('pqos -a "llc:1=%s;"' % cores)
         elif action == -1:
-            for core in self.cores[::-1]:
-                if core % 2 == 1:
-                    self.cores.remove(core)
-                    os.system('pqos -a "llc:0=%s;" > /dev/null' % core)
-                    break
-            else:
-                core = self.cores.pop()
-                os.system('pqos -a "llc:0=%s;" > /dev/null' % core)
+            core = self.cores.pop()
+            cores = str(self.cores)[1:-1].replace(' ', '')
+            os.system('pqos -a "llc:0=%s;" > /dev/null' % cores)
+            # for core in self.cores[::-1]:
+            #     if core % 2 == 1:
+            #         self.cores.remove(core)
+            #         os.system('pqos -a "llc:0=%s;" > /dev/null' % core)
+            #         break
+            # else:
+            #     core = self.cores.pop()
+            #     os.system('pqos -a "llc:0=%s;" > /dev/null' % core)
         coreMapLogger.warn(str(self.cores))
 
         thread_index = 0
@@ -264,13 +269,13 @@ class CustomEnv(gym.Env):
         containerReward['lock'].release()
 
         sjrnLogger.info("99th percentile is : " + str(qos) + " " + str(round(time.time()) - self.startingTime))
-        qosTarget = 3000
+        qosTarget = 4000
         if qos > qosTarget:
             reward = max(-(qos/qosTarget)**3, -50)
         else:
             # reward = qos/qosTarget + (20/self.appCacheWays + 24/len(self.cores))*2
             # reward = qosTarget/qos + (20/self.appCacheWays + 24/len(self.cores))*2
-            reward = qosTarget/qos + (20/self.appCacheWays) + 2*(24/len(self.cores))
+            reward = qosTarget/qos + (20/self.appCacheWays) + (24/len(self.cores))
         if ignoreAction != 0:
             reward = -10
         rewardLogger.info("Reward is : " + str(reward) + " " + str(round(time.time()) - self.startingTime))
@@ -305,8 +310,8 @@ if __name__ == "__main__":
 
     env = CustomEnv()
 
-    # policy_kwargs = dict(act_fun=tf.nn.relu, layers=[512, 256, 128])
-    policy_kwargs = dict(act_fun=tf.nn.relu, layers=[256, 128, 64])
+    policy_kwargs = dict(act_fun=tf.nn.relu, layers=[512, 256, 128])
+    # policy_kwargs = dict(act_fun=tf.nn.relu, layers=[256, 128, 64])
 
     model = DQN("MlpPolicy", env, policy_kwargs=policy_kwargs, verbose=1,
             train_freq=1,
@@ -318,7 +323,7 @@ if __name__ == "__main__":
             gamma=0.99, exploration_fraction=0.1, exploration_initial_eps=1, exploration_final_eps=0.01,
             tensorboard_log="./logs/%s/" % dt, n_cpu_tf_sess=22
             )
-    model.learn(total_timesteps=16000)
+    model.learn(total_timesteps=15000)
     model.save("./models/%s/model.zip" % dt)
 
 
