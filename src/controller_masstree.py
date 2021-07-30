@@ -338,7 +338,7 @@ class CustomEnv(gym.Env):
         self.startPerfmon()
         while True:
             output = process.stdout.readline()
-            if ( round(time.time()) - self.processStartTime ) > 4000:
+            if ( round(time.time()) - self.processStartTime ) > 2800:
                 print('Killing App')
                 processReady.acquire()
                 process.kill()

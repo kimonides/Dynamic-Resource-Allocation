@@ -99,7 +99,7 @@ if __name__ == "__main__":
     # batch_processes.append(startMasstreeBatch(batch_cores))
     # batch_processes.append(startSphinxBatch(batch_cores))
 
-    model1 = DQN.load(load_path='./models/07_08_08_img_dnn/model.zip')
+    model1 = DQN.load(load_path='/home/akimon/Dynamic-Resource-Allocation/src/models/07_29_07_img_dnn_best/model.zip/rl_model_12500_steps.zip')
     model2 = DQN.load(load_path='./models/07_03_06_masstree/model.zip')
 
     time.sleep(2)
