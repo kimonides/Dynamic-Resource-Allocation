@@ -10,6 +10,7 @@ from stable_baselines import DQN
 import threading
 import time
 import configparser
+import loggers
 import tensorflow as tf
 import numpy as np
 import perfmon
@@ -17,14 +18,10 @@ import struct
 import random
 import psutil
 from collections import deque
-import shlex
+from itertools import zip_longest
 
 import logging
-import loggers
-
 import os
-
-# import loggers
 
 # logging.disable(logging.WARNING)
 # os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -53,15 +50,16 @@ deques = {
     'PERF_COUNT_HW_CACHE_L1I': deque([], maxlen=window_size),
 }
 
-dt = datetime.now().strftime("%m_%d_%H")
-Path("./models/%s_img_dnn" % dt).mkdir(parents=True, exist_ok=True)
-# self.rewardLogger, wayLogger, self.sjrnLogger, self.stateLogger, coreLogger, rpsLogger, coreMapLogger = loggers.setupDataLoggers('img_dnn')
+
+rewardLogger, wayLogger, sjrnLogger, stateLogger, coreLogger, rpsLogger, coreMapLogger = loggers.setupDataLoggers()
 
 
 EVENTS = ['UNHALTED_CORE_CYCLES', 'INSTRUCTION_RETIRED', 'PERF_COUNT_HW_CPU_CYCLES', 'UNHALTED_REFERENCE_CYCLES', \
         'UOPS_RETIRED', 'BRANCH_INSTRUCTIONS_RETIRED', 'MISPREDICTED_BRANCH_RETIRED', \
         'PERF_COUNT_HW_BRANCH_MISSES', 'LLC_MISSES', 'PERF_COUNT_HW_CACHE_L1D', \
         'PERF_COUNT_HW_CACHE_L1I']
+# EVENT_MAX = [1009566688, 2200098315, 1413332030, 4404609, 390883292,
+#              18043023, 1413719982, 18032364, 20587451, 41154, 7496985285]
 
 EVENT_MAX = [1251666326, 2697635738, 1502160478, 1385062673, 3899393008, 265396012, 42954597, 42960949, 1598918, 14667253, 30645]
 
@@ -69,100 +67,100 @@ EVENT_MAX = [e*2 for e in EVENT_MAX]
 
 
 class CustomEnv(gym.Env):
-    def __init__(self, cores, ways, unusedCores):
+    def __init__(self):
         super(CustomEnv, self).__init__()
-
-        self.rewardLogger, self.wayLogger, self.sjrnLogger, self.stateLogger, self.coreLogger, self.rpsLogger, self.coreMapLogger = loggers.setupDataLoggers('img_dnn')
-
-        def setupLoger(name, file):
-            log = logging.getLogger(name)
-            log.setLevel(logging.DEBUG)
-            fh = logging.FileHandler(file, mode='w')
-            fh.setLevel(logging.DEBUG)
-            formatter = logging.Formatter('%(message)s')
-            fh.setFormatter(formatter)
-            log.addHandler(fh)
-
-            return log
-        
-        self.resource_logger = setupLoger('resource_%s' % 'img_dnn', './logs/{0}_{1}/resource.log'.format(dt,'img_dnn'))
-
-
         global deques, window_size
         self.deques = deques
         self.window_size = window_size
 
         self.startingTime = round(time.time())
-        self.process = None
-
-        self.cores = cores
-        # self.cores = [core for core in range(12, 24)]
-        # self.cores += [core for core in range(36, 48)]
-
-        self.allCores = [core for core in range(12, 24)]
-        self.allCores += [core for core in range(36, 48)]
-
-        # self.appCacheWays = 20
-        self.appCacheWays = ways
-
-        threading.Thread(target=self.containerLogger, args=(containerReward,), daemon=True).start()
+        threading.Thread(target=loggers.containerLogger, args=(containerReward, rpsLogger, self.startingTime,), daemon=True).start()
 
         time.sleep(3)
-        if self.process == None:
+        self.pid = 0
+        for proc in psutil.process_iter():
+            if 'img-dnn_integra' in proc.name():
+                self.pid = proc.pid
+                print(self.pid)
+        if self.pid == 0 :
             print("Couldn't find app pid, exiting...")
             exit(-1)
-        
+
+        self.tid = list()
+        for tid in psutil.Process(self.pid).threads():
+            self.tid.append(tid.id)
+
         self.action_space = gym.spaces.Discrete(5)
         self.observation_space = gym.spaces.Box(low=0, high=1.5, shape=(13,), dtype=np.float64)
 
         os.system('pqos -R > /dev/null')
         os.system('pqos -e "llc:0=0x30000;" > /dev/null')
 
-        # self.updateWays()
-        self.updateCores(unusedCores)
-        # self.initialMapping()
+        self.appCacheWays = 20
+        self.updateWays()
+
+        self.cores = [core for core in range(12, 24)]
+        self.cores += [core for core in range(36, 48)]
+
+        self.allCores = [core for core in range(12, 24)]
+        self.allCores += [core for core in range(36, 48)]
+
+        self.initialMapping()
 
         cores = str(self.cores)[1:-1].replace(' ', '')
-        os.system('pqos -a "llc:2=%s;" > /dev/null' % cores)
+        os.system('pqos -a "llc:1=%s;"' % cores)
 
+        self.startPerfmon()
+
+        self.previousTime = 0
+    
+    def initialMapping(self):
+        for pid, core in zip(self.tid, self.allCores):
+            p = psutil.Process(pid=pid)
+            p.cpu_affinity([core])
+    
+    def mapCores(self,action):
+        # action is +-1
+        if action == 1:
+            unusedCores = [core for core in self.allCores if core not in self.cores]
+            newCore = unusedCores[0]
+            self.cores.append(newCore)
+            # for core in unusedCores:
+            #     if core % 2 == 0:
+            #         self.cores.append(core)
+            #         break
+            # else:
+            #     newCore = unusedCores[0]
+            #     self.cores.append(newCore)
+            cores = str(self.cores)[1:-1].replace(' ', '')
+            os.system('pqos -a "llc:1=%s;"' % cores)
+        elif action == -1:
+            core = self.cores.pop()
+            cores = str(self.cores)[1:-1].replace(' ', '')
+            os.system('pqos -a "llc:0=%s;" > /dev/null' % cores)
+            # for core in self.cores[::-1]:
+            #     if core % 2 == 1:
+            #         self.cores.remove(core)
+            #         os.system('pqos -a "llc:0=%s;" > /dev/null' % core)
+            #         break
+            # else:
+            #     core = self.cores.pop()
+            #     os.system('pqos -a "llc:0=%s;" > /dev/null' % core)
+        coreMapLogger.warn(str(self.cores))
+
+        thread_index = 0
+        for core in self.cores:
+            pid = self.tid[thread_index]
+            thread_index += 1
+            p = psutil.Process(pid=pid)
+            p.cpu_affinity([core])
         
-    def updateCores(self, unused_cores):
-        cores_string = str(self.cores)[1:-1].replace(' ', '')
-        os.system('pqos -a "llc:2=%s;" > /dev/null' % cores_string)
-
-        # unused_cores = [core for core in self.allCores if core not in  self.cores]
-        unused_cores_string = str(unused_cores)[1:-1].replace(' ', '')
-        # os.system('pqos -a "llc:0=%s;" > /dev/null' % unused_cores_string)
-
-        self.resource_logger.warn("Cores - %s %s" % (self.cores, round(time.time()) - self.startingTime))
-        self.resource_logger.warn("Unused Cores - %s %s" % (unused_cores, round(time.time()) - self.startingTime))
-
-        core_index = 0
-        for t in self.tid:
-            p = psutil.Process(pid=t)
-            p.cpu_affinity([self.cores[core_index]])
-            core_index = (core_index + 1) % len(self.cores) 
-        
-        self.coreLogger.warn("Update cores to - %s %s" % (len(self.cores) + 1, round(time.time()) - self.startingTime))
-
-    def formatForCAT(self, ways, reverse=False):
-        if reverse:
-            pivot = 1 << 19
-            res = 0
-            for _ in range(0,ways):
-                res = res + pivot
-                pivot = pivot >> 1      
-        else:
-            res = 1 << ways - 1
-            res = res + res - 1
-        return hex(res)
-
-    def updateWays(self, reverse=False):
-        self.wayLogger.warn("Update ways to - %s %s" % (self.appCacheWays, round(time.time()) - self.startingTime))
-
-        self.resource_logger.warn("Ways - %s %s" % (self.formatForCAT(self.appCacheWays, reverse), round(time.time()) - self.startingTime))
-
-        os.system('sudo pqos -e "llc:2=%s;" > /dev/null' % self.formatForCAT(self.appCacheWays, reverse))
+        cores_reversed = self.cores[::-1]
+        for i in range(thread_index,len(self.tid)):
+            core = self.cores[ ( i - thread_index ) % len(cores_reversed) ]
+            pid = self.tid[i]
+            p = psutil.Process(pid=pid)
+            p.cpu_affinity([core])
 
     def startPerfmon(self):
         self.sessions = [None] * len(self.tid)
@@ -178,7 +176,58 @@ class CustomEnv(gym.Env):
                 pmc[i] += float(count)
             pmc[i] /= len(self.tid)
         return pmc
-    
+
+    def updateCPUs(self, core=None):
+        cores = str(self.cores)[1:-1].replace(' ', '')
+        os.system('taskset -apc %s %s > /dev/null' % (cores,self.pid))
+        os.system('pqos -a "llc:1=%s;" > /dev/null' % cores)
+        if(core != None):
+            os.system('pqos -a "llc:0=%s;" > /dev/null' % core)
+
+    def formatForCAT(self, ways):
+        res = 1 << ways - 1
+        res = res + res - 1
+        return hex(res)
+
+    def updateWays(self):
+        os.system('sudo pqos -e "llc:1=%s;" > /dev/null' % self.formatForCAT(self.appCacheWays))
+
+    def takeAction(self, action):
+        if(action == 0):
+            if(self.appCacheWays < 20):
+                self.appCacheWays += 1
+                wayLogger.warn("Increasing ways to - %s %s" % (self.appCacheWays, round(time.time()) - self.startingTime))
+                self.updateWays()
+            else:
+                wayLogger.warn("Ignore - %s %s" % (self.appCacheWays, round(time.time()) - self.startingTime))
+                return -1
+        elif(action == 1):
+            if(self.appCacheWays > 3):
+                self.appCacheWays -= 1
+                wayLogger.warn("Decreasing ways to - %s %s" % (self.appCacheWays, round(time.time()) - self.startingTime))
+                self.updateWays()
+            else:
+                wayLogger.warn("Ignore - %s %s" % (self.appCacheWays, round(time.time()) - self.startingTime))
+                return -1
+        elif(action == 2):
+            if(len(self.cores) < 24):
+                coreLogger.warn("Increasing cores to - %s %s" % (len(self.cores) + 1, round(time.time()) - self.startingTime))
+                self.mapCores(1)
+            else:
+                coreLogger.warn("Ignore - %s %s" % (len(self.cores), round(time.time()) - self.startingTime))
+                return -1
+        elif(action == 3):
+            if(len(self.cores) > 3):
+                coreLogger.warn("Decreasing cores to - %s %s" % (len(self.cores) - 1, round(time.time()) - self.startingTime))
+                self.mapCores(-1)
+            else:
+                coreLogger.warn("Ignore - %s %s" % (len(self.cores), round(time.time()) - self.startingTime))
+                return -1
+        else:
+            wayLogger.warn("Maintaining - %s %s" % (self.appCacheWays, round(time.time()) - self.startingTime))
+            coreLogger.warn("Maintaining - %s %s" % (len(self.cores), round(time.time()) - self.startingTime))
+        return 0
+
     def running_mean(self, x, N):
         cumsum = np.cumsum(np.insert(x, 0, 0))
         return (cumsum[N:] - cumsum[:-N]) / float(N)
@@ -197,38 +246,39 @@ class CustomEnv(gym.Env):
                 run_mean.append(self.running_mean(val, self.window_size)[0])
             return np.array(run_mean)
 
-    
     def getState(self, before, after):
         state = [0] * len(EVENTS)
         for i in range(0,len(EVENTS)):
             state[i] = after[i] - before[i]
 
         normalized = self.norm_data(state)
-        self.stateLogger.info("State is : %s %s" % (list(normalized), round(time.time()) - self.startingTime))
+        stateLogger.info("State is : %s %s" % (list(normalized), round(time.time()) - self.startingTime))
         normalized = np.append(normalized, [ len(self.cores)/24 , self.appCacheWays/20 ])
 
         return list(normalized)
 
-    
-
-
-    def getReward(self):
+    def getReward(self, ignoreAction = 0):
         global containerReward
         while(len(containerReward['reward']) == 0):
             time.sleep(0.01)
-            self.rewardLogger.info("Waiting on reward " + str(round(time.time()) - self.startingTime))
+            rewardLogger.info("Waiting on reward " +
+                              str(round(time.time()) - self.startingTime))
         containerReward['lock'].acquire()
         sjrn99 = np.percentile(containerReward['reward'], 99)
         qos = round(sjrn99/1e3)
         containerReward['lock'].release()
 
-        self.sjrnLogger.info("99th percentile is : " + str(qos) + " " + str(round(time.time()) - self.startingTime))
-        qosTarget = 3000
+        sjrnLogger.info("99th percentile is : " + str(qos) + " " + str(round(time.time()) - self.startingTime))
+        qosTarget = 4000
         if qos > qosTarget:
             reward = max(-(qos/qosTarget)**3, -50)
         else:
-            reward = qosTarget/qos + (20/self.appCacheWays) + 2*(24/len(self.cores))
-        self.rewardLogger.info("Reward is : " + str(reward) + " " + str(round(time.time()) - self.startingTime))
+            # reward = qos/qosTarget + (20/self.appCacheWays + 24/len(self.cores))*2
+            # reward = qosTarget/qos + (20/self.appCacheWays + 24/len(self.cores))*2
+            reward = qosTarget/qos + (20/self.appCacheWays) + (24/len(self.cores))
+        if ignoreAction != 0:
+            reward = -10
+        rewardLogger.info("Reward is : " + str(reward) + " " + str(round(time.time()) - self.startingTime))
         return reward
 
     def clearReward(self):
@@ -238,62 +288,14 @@ class CustomEnv(gym.Env):
         containerReward['lock'].release()
 
     def step(self, action):
-        return [],0,0,{}
         pmc_before = self.getPMC()
-        self.takeAction(action)
+        ignored_action = self.takeAction(action)
         self.clearReward()
         time.sleep(2)
         pmc_after = self.getPMC()
         state = self.getState(pmc_before, pmc_after)
-        reward = self.getReward()
+        reward = self.getReward(ignored_action)
         return state, reward, 0, {}
-
-    def startProcess(self):
-        my_env = os.environ.copy()
-        my_env["DATA_ROOT"] = "/home/akimon/inputs/tailbench.inputs"
-        my_env["TBENCH_WARMUPREQS"] = '1'
-        my_env["TBENCH_MAXREQS"] = '0'
-        my_env["TBENCH_QPS"] = '500'
-        my_env["TBENCH_MINSLEEPNS"] = '10000'
-        my_env["TBENCH_MNIST_DIR"] = "/home/akimon/inputs/tailbench.inputs/img-dnn/mnist"
-        my_env["TBENCH_QPS"] = '500'
-        my_env["NTHREADS"] = '24'
-        cores = str(self.cores)[1:-1].replace(' ', '')
-        command = 'taskset -ac %s /home/akimon/tailbench_latest_latest/tailbenchQPS/img-dnn/run.sh' % (cores)
-        command = shlex.split(command)
-        process = subprocess.Popen(command, cwd="/home/akimon/tailbench_latest_latest/tailbenchQPS/img-dnn/", shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        
-        time.sleep(2)
-        self.process = psutil.Process(process.pid).children()[0]
-        print(self.process)
-        self.tid = list()
-        for tid in self.process.threads():
-            self.tid.append(tid.id)
-        self.processStartTime = round(time.time())
-        return process
-    
-    def containerLogger(self, containerReward):
-        process = self.startProcess()
-        self.startPerfmon()
-        while True:
-            output = process.stdout.readline()
-            if output:
-                try:
-                    output = output.decode().strip()
-                    if( output.startswith('RPS')  ):
-                        rps = output.split(':')[1]
-                        self.rpsLogger.warn("RPS - %s %s" % (rps, round(time.time()) - self.startingTime))
-                        continue
-                    if output.isdigit() and containerReward['lock'].acquire(blocking=False):
-                        sjrn = float(output)
-                        if sjrn < 20000000:
-                            containerReward['reward'].append(sjrn)
-                        containerReward['lock'].release()
-                except ValueError:
-                    containerReward['lock'].release()
-
-
-
 
     def reset(self):
         state = [0] * (len(EVENTS) + 2)
@@ -308,8 +310,8 @@ if __name__ == "__main__":
 
     env = CustomEnv()
 
-    # policy_kwargs = dict(act_fun=tf.nn.relu, layers=[512, 256, 128])
-    policy_kwargs = dict(act_fun=tf.nn.relu, layers=[256, 128, 64])
+    policy_kwargs = dict(act_fun=tf.nn.relu, layers=[512, 256, 128])
+    # policy_kwargs = dict(act_fun=tf.nn.relu, layers=[256, 128, 64])
 
     model = DQN("MlpPolicy", env, policy_kwargs=policy_kwargs, verbose=1,
             train_freq=1,
@@ -321,8 +323,7 @@ if __name__ == "__main__":
             gamma=0.99, exploration_fraction=0.1, exploration_initial_eps=1, exploration_final_eps=0.01,
             tensorboard_log="./logs/%s/" % dt, n_cpu_tf_sess=22
             )
-    model.learn(total_timesteps=20000)
-    model.predict()
+    model.learn(total_timesteps=15000)
     model.save("./models/%s/model.zip" % dt)
 
 
