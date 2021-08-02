@@ -262,7 +262,8 @@ class CustomEnv(gym.Env):
         global containerReward
         while(len(containerReward['reward']) == 0):
             time.sleep(0.01)
-            rewardLogger.info("Waiting on reward " + str(round(time.time()) - self.startingTime))
+            rewardLogger.info("Waiting on reward " +
+                              str(round(time.time()) - self.startingTime))
         containerReward['lock'].acquire()
         sjrn99 = np.percentile(containerReward['reward'], 99)
         qos = round(sjrn99/1e3)
@@ -333,7 +334,7 @@ class CustomEnv(gym.Env):
         self.startPerfmon()
         while True:
             output = process.stdout.readline()
-            if ( round(time.time()) - self.processStartTime ) > 3600:
+            if ( round(time.time()) - self.processStartTime ) > 4000:
                 print('Killing App')
                 processReady.acquire()
                 process.kill()
