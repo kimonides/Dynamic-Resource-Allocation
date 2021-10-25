@@ -14,10 +14,6 @@ The controller leverages deep reinforcement learning to achieve the best possibl
 * [Custom Tailbench for testing purposes](https://github.com/kimonides/drl_tailbench)
 * Numpy
 
-### Installing
-
-* No installation needed
-
 ### Executing program
 
 ```
