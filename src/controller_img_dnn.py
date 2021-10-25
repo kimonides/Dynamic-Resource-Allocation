@@ -7,6 +7,7 @@ import os
 from silence_tensorflow import silence_tensorflow
 silence_tensorflow()
 from stable_baselines import DQN
+from stable_baselines import PPO2
 import threading
 import time
 import configparser
@@ -313,6 +314,11 @@ if __name__ == "__main__":
     policy_kwargs = dict(act_fun=tf.nn.relu, layers=[512, 256, 128])
     # policy_kwargs = dict(act_fun=tf.nn.relu, layers=[256, 128, 64])
 
+    # model = PPO2("MlpPolicy", env, policy_kwargs=policy_kwargs, verbose=1,
+    #         gamma=0.99, learning_rate=0.0025, 
+    #         tensorboard_log="./logs/%s/" % dt, n_cpu_tf_sess=22
+    #         )
+
     model = DQN("MlpPolicy", env, policy_kwargs=policy_kwargs, verbose=1,
             train_freq=1,
             prioritized_replay=True,
@@ -323,6 +329,7 @@ if __name__ == "__main__":
             gamma=0.99, exploration_fraction=0.1, exploration_initial_eps=1, exploration_final_eps=0.01,
             tensorboard_log="./logs/%s/" % dt, n_cpu_tf_sess=22
             )
+
     model.learn(total_timesteps=15000)
     model.save("./models/%s/model.zip" % dt)
 
