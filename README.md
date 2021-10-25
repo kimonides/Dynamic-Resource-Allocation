@@ -11,7 +11,6 @@ The controller leverages deep reinforcement learning to achieve the best possibl
 ### Dependencies
 * Python3
 * Stable Baselines 3
-* [Custom PCM for this project](https://github.com/kimonides/drl_pcm)
 * [Custom Tailbench for testing purposes](https://github.com/kimonides/drl_tailbench)
 * Numpy
 
