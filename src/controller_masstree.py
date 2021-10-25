@@ -103,7 +103,6 @@ class CustomEnv(gym.Env):
 
         self.updateWays()
 
-        # self.updateCPUs()
         self.initialMapping()
 
         cores = str(self.cores)[1:-1].replace(' ', '')
@@ -171,13 +170,6 @@ class CustomEnv(gym.Env):
                 pmc[i] += float(count)
             pmc[i] /= len(self.tid)
         return pmc
-
-    def updateCPUs(self, core=None):
-        cores = str(self.cores)[1:-1].replace(' ', '')
-        os.system('taskset -apc %s %s > /dev/null' % (cores,self.process.pid))
-        os.system('pqos -a "llc:1=%s;" > /dev/null' % cores)
-        if(core != None):
-            os.system('pqos -a "llc:0=%s;" > /dev/null' % core)
 
     def formatForCAT(self, ways):
         res = 1 << ways - 1

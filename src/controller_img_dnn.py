@@ -126,27 +126,12 @@ class CustomEnv(gym.Env):
             unusedCores = [core for core in self.allCores if core not in self.cores]
             newCore = unusedCores[0]
             self.cores.append(newCore)
-            # for core in unusedCores:
-            #     if core % 2 == 0:
-            #         self.cores.append(core)
-            #         break
-            # else:
-            #     newCore = unusedCores[0]
-            #     self.cores.append(newCore)
             cores = str(self.cores)[1:-1].replace(' ', '')
             os.system('pqos -a "llc:1=%s;"' % cores)
         elif action == -1:
             core = self.cores.pop()
             cores = str(self.cores)[1:-1].replace(' ', '')
             os.system('pqos -a "llc:0=%s;" > /dev/null' % cores)
-            # for core in self.cores[::-1]:
-            #     if core % 2 == 1:
-            #         self.cores.remove(core)
-            #         os.system('pqos -a "llc:0=%s;" > /dev/null' % core)
-            #         break
-            # else:
-            #     core = self.cores.pop()
-            #     os.system('pqos -a "llc:0=%s;" > /dev/null' % core)
         coreMapLogger.warn(str(self.cores))
 
         thread_index = 0
@@ -177,13 +162,6 @@ class CustomEnv(gym.Env):
                 pmc[i] += float(count)
             pmc[i] /= len(self.tid)
         return pmc
-
-    def updateCPUs(self, core=None):
-        cores = str(self.cores)[1:-1].replace(' ', '')
-        os.system('taskset -apc %s %s > /dev/null' % (cores,self.pid))
-        os.system('pqos -a "llc:1=%s;" > /dev/null' % cores)
-        if(core != None):
-            os.system('pqos -a "llc:0=%s;" > /dev/null' % core)
 
     def formatForCAT(self, ways):
         res = 1 << ways - 1
@@ -312,12 +290,6 @@ if __name__ == "__main__":
     env = CustomEnv()
 
     policy_kwargs = dict(act_fun=tf.nn.relu, layers=[512, 256, 128])
-    # policy_kwargs = dict(act_fun=tf.nn.relu, layers=[256, 128, 64])
-
-    # model = PPO2("MlpPolicy", env, policy_kwargs=policy_kwargs, verbose=1,
-    #         gamma=0.99, learning_rate=0.0025, 
-    #         tensorboard_log="./logs/%s/" % dt, n_cpu_tf_sess=22
-    #         )
 
     model = DQN("MlpPolicy", env, policy_kwargs=policy_kwargs, verbose=1,
             train_freq=1,
